@@ -39,6 +39,22 @@ main{padding:16px}
 dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);max-width:min(92vw,900px);padding:0}
 dialog img,dialog video{max-width:100%;max-height:80vh;display:block}
 dialog::backdrop{background:rgba(0,0,0,.6)}
+
+#cropdlg{width:min(96vw,980px)}
+.cwrap{padding:14px}
+.ctools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.ctools label{font-size:12px;color:var(--mute);display:flex;flex-direction:column;gap:2px}
+.ctools select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit;font-size:13px}
+.cstage{position:relative;display:inline-block;line-height:0;user-select:none;-webkit-user-select:none;touch-action:none;overflow:hidden;max-width:100%}
+.cstage img{max-width:100%;max-height:58vh;display:block;pointer-events:none}
+.cbox{position:absolute;box-shadow:0 0 0 9999px rgba(0,0,0,.55);outline:2px solid #fff;cursor:move;touch-action:none}
+.cbox::before,.cbox::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(to right,transparent 33%,rgba(255,255,255,.4) 33%,rgba(255,255,255,.4) calc(33% + 1px),transparent calc(33% + 1px),transparent 66%,rgba(255,255,255,.4) 66%,rgba(255,255,255,.4) calc(66% + 1px),transparent calc(66% + 1px))}
+.cbox::after{background:linear-gradient(to bottom,transparent 33%,rgba(255,255,255,.4) 33%,rgba(255,255,255,.4) calc(33% + 1px),transparent calc(33% + 1px),transparent 66%,rgba(255,255,255,.4) 66%,rgba(255,255,255,.4) calc(66% + 1px),transparent calc(66% + 1px))}
+.h{position:absolute;width:22px;height:22px;background:#fff;border:2px solid var(--accent);border-radius:50%;touch-action:none}
+.h[data-c=nw]{left:-11px;top:-11px;cursor:nwse-resize}.h[data-c=ne]{right:-11px;top:-11px;cursor:nesw-resize}
+.h[data-c=sw]{left:-11px;bottom:-11px;cursor:nesw-resize}.h[data-c=se]{right:-11px;bottom:-11px;cursor:nwse-resize}
+.cfoot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.cfoot .info{margin-right:auto}
 </style>
 </head>
 <body>
@@ -55,6 +71,21 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 <main><div class="wrap"><div class="grid" id="grid"></div><div class="note" id="note"></div></div></main>
 <div class="toast" id="toast"></div>
 <dialog id="dlg"></dialog>
+<dialog id="cropdlg"><div class="cwrap">
+  <div class="ctools">
+    <label>Shape<select id="c-ratio">
+      <option value="0">Free</option><option value="1">Square 1:1</option><option value="1.3333333">Landscape 4:3</option>
+      <option value="1.7777778">Wide 16:9</option><option value="1.5">Photo 3:2</option>
+      <option value="0.75">Portrait 3:4</option><option value="0.5625">Tall 9:16 (phone)</option><option value="0.6666667">Portrait 2:3</option>
+    </select></label>
+    <label>Max width<select id="c-max"><option value="0">Original size</option><option value="2400">2400 px</option><option value="1600">1600 px</option><option value="1200">1200 px</option><option value="800">800 px</option></select></label>
+    <label>Format<select id="c-fmt"><option value="image/jpeg">JPG</option><option value="image/png">PNG</option><option value="image/webp">WebP</option></select></label>
+  </div>
+  <div class="cstage" id="c-stage"><img id="c-img" alt=""><div class="cbox" id="c-box"><i class="h" data-c="nw"></i><i class="h" data-c="ne"></i><i class="h" data-c="sw"></i><i class="h" data-c="se"></i></div></div>
+  <div class="cfoot"><span class="info" id="c-info"></span>
+    <button class="btn" id="c-cancel">Close</button><button class="btn primary" id="c-save">Download crop</button></div>
+  <div class="help">This saves a cropped copy to your device. The original stays unchanged. To add the copy to the library, use + Add images.</div>
+</div></dialog>
 <script>
 const OWNER="harekrishnaganjoni",REPO="iskcon-images",BRANCH="main",ROOT="public/";
 const IMG=/\.(jpe?g|png|webp|gif|svg|avif)$/i,VID=/\.(mp4|webm)$/i;
@@ -104,17 +135,95 @@ function render(){
       <div class="meta"><div class="name"></div><div class="info"></div></div>
       <div class="actions">
         <button class="btn" data-copy>Copy link</button>
-        <a class="btn" target="_blank" rel="noopener" href="https://github.dev${gh}/blob/${BRANCH}/${ROOT}${enc(f.path)}">Rename / move</a>
+        <a class="btn" href="${url}" download="${f.path.split("/").pop()}">Download</a>
+        ${isVid?"":`<button class="btn" data-crop>Crop</button>`}
         <a class="btn" target="_blank" rel="noopener" href="${url}">Open</a>
+        <a class="btn" target="_blank" rel="noopener" href="https://github.dev${gh}/blob/${BRANCH}/${ROOT}${enc(f.path)}">Rename / move</a>
         <a class="btn danger" target="_blank" rel="noopener" href="https://github.com${gh}/delete/${BRANCH}/${ROOT}${enc(f.path)}">Delete</a>
       </div>`;
     d.querySelector(".name").textContent=f.path.split("/").pop();
     d.querySelector(".info").textContent=`${catOf(f)} · ${kb(f.size)}`;
     d.querySelector("[data-copy]").onclick=async()=>{try{await navigator.clipboard.writeText(url);toast("Link copied")}catch(e){prompt("Copy this link:",url)}};
+    const cb=d.querySelector("[data-crop]");if(cb)cb.onclick=()=>openCrop(url,f.path.split("/").pop());
     d.querySelector("[data-open]").onclick=e=>{e.preventDefault();const dlg=document.getElementById("dlg");dlg.innerHTML=isVid?`<video src="${url}" controls autoplay></video>`:`<img src="${url}" alt="">`;dlg.showModal()};
     g.append(d);
   }
 }
+
+/* ---------- crop tool ---------- */
+const $=id=>document.getElementById(id);
+const C={x:0,y:0,w:0,h:0,name:"",drag:null};
+const cimg=$("c-img"),cbox=$("c-box"),cstage=$("c-stage");
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const ratio=()=>parseFloat($("c-ratio").value)||0;
+const dispW=()=>cimg.clientWidth,dispH=()=>cimg.clientHeight;
+const scale=()=>cimg.naturalWidth/dispW();
+function paint(){
+  Object.assign(cbox.style,{left:C.x+"px",top:C.y+"px",width:C.w+"px",height:C.h+"px"});
+  let w=Math.round(C.w*scale()),h=Math.round(C.h*scale()),m=parseInt($("c-max").value);
+  if(m&&w>m){h=Math.round(h*m/w);w=m}
+  $("c-info").textContent=`Output: ${w} × ${h} px`;
+}
+function fitRatio(){ // largest box of the chosen shape, centred on the current box
+  const r=ratio(),W=dispW(),H=dispH();
+  if(!r){return}
+  const cx=C.x+C.w/2,cy=C.y+C.h/2;
+  let w=C.w,h=C.h;
+  if(w/h>r)w=h*r;else h=w/r;
+  if(w>W){w=W;h=w/r}if(h>H){h=H;w=h*r}
+  C.w=w;C.h=h;C.x=clamp(cx-w/2,0,W-w);C.y=clamp(cy-h/2,0,H-h);
+}
+function openCrop(url,name){
+  C.name=name;$("c-ratio").value="0";
+  cimg.onload=()=>{C.x=0;C.y=0;C.w=dispW();C.h=dispH();const k=0.9;C.w*=k;C.h*=k;C.x=(dispW()-C.w)/2;C.y=(dispH()-C.h)/2;paint()};
+  cimg.src=url;$("cropdlg").showModal();
+  if(cimg.complete&&cimg.naturalWidth)cimg.onload();
+}
+function pt(e){const r=cstage.getBoundingClientRect();return{x:clamp(e.clientX-r.left,0,dispW()),y:clamp(e.clientY-r.top,0,dispH())}}
+cbox.addEventListener("pointerdown",e=>{
+  e.preventDefault();cbox.setPointerCapture(e.pointerId);
+  const c=e.target.dataset&&e.target.dataset.c,p=pt(e);
+  if(c){ // anchor = the opposite corner
+    const ax=c.includes("w")?C.x+C.w:C.x,ay=c.includes("n")?C.y+C.h:C.y;
+    C.drag={mode:"size",ax,ay}
+  }else C.drag={mode:"move",ox:p.x-C.x,oy:p.y-C.y};
+});
+cbox.addEventListener("pointermove",e=>{
+  if(!C.drag)return;const p=pt(e),W=dispW(),H=dispH();
+  if(C.drag.mode==="move"){C.x=clamp(p.x-C.drag.ox,0,W-C.w);C.y=clamp(p.y-C.drag.oy,0,H-C.h)}
+  else{
+    const {ax,ay}=C.drag,r=ratio(),sx=p.x>=ax?1:-1,sy=p.y>=ay?1:-1;
+    let w=Math.abs(p.x-ax),h=Math.abs(p.y-ay);
+    const mw=sx>0?W-ax:ax,mh=sy>0?H-ay:ay;
+    if(r){if(w/r>h)h=w/r;else w=h*r;const k=Math.min(1,mw/w,mh/h);w*=k;h*=k}
+    else{w=Math.min(w,mw);h=Math.min(h,mh)}
+    w=Math.max(w,20);h=Math.max(h,r?20/r:20);
+    C.w=w;C.h=h;C.x=sx>0?ax:ax-w;C.y=sy>0?ay:ay-h;
+  }
+  paint();
+});
+const endDrag=()=>{C.drag=null};
+cbox.addEventListener("pointerup",endDrag);cbox.addEventListener("pointercancel",endDrag);
+$("c-ratio").onchange=()=>{fitRatio();paint()};
+$("c-max").onchange=paint;
+$("c-cancel").onclick=()=>$("cropdlg").close();
+$("c-save").onclick=()=>{
+  const s=scale(),fmt=$("c-fmt").value,m=parseInt($("c-max").value);
+  let cw=Math.round(C.w*s),ch=Math.round(C.h*s);
+  if(m&&cw>m){ch=Math.round(ch*m/cw);cw=m}
+  const cv=document.createElement("canvas");cv.width=cw;cv.height=ch;
+  const ctx=cv.getContext("2d");
+  if(fmt==="image/jpeg"){ctx.fillStyle="#fff";ctx.fillRect(0,0,cw,ch)}
+  ctx.drawImage(cimg,C.x*s,C.y*s,C.w*s,C.h*s,0,0,cw,ch);
+  cv.toBlob(b=>{
+    const ext={"image/jpeg":"jpg","image/png":"png","image/webp":"webp"}[fmt];
+    const a=document.createElement("a");a.href=URL.createObjectURL(b);
+    a.download=C.name.replace(/\.[^.]+$/,"")+"-crop."+ext;
+    document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast("Cropped copy downloaded");
+  },fmt,0.92);
+};
+window.addEventListener("resize",()=>{if($("cropdlg").open){C.x=clamp(C.x,0,Math.max(0,dispW()-C.w));C.y=clamp(C.y,0,Math.max(0,dispH()-C.h));paint()}});
 document.getElementById("q").addEventListener("input",e=>{query=e.target.value.trim().toLowerCase();render()});
 document.getElementById("dlg").addEventListener("click",e=>{if(e.target.id==="dlg")e.target.close()});
 load();
