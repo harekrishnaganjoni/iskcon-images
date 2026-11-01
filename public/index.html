@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>ISKCON Juja Image Library</title>
+<style>
+:root{--bg:#faf7f2;--card:#fff;--ink:#2a2118;--mute:#7a6e60;--line:#e6dfd3;--accent:#c4561a;--accent-ink:#fff;--danger:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#17130f;--card:#221c16;--ink:#f1e9dd;--mute:#a89b8a;--line:#3a3128;--accent:#e8844a;--accent-ink:#17130f;--danger:#f2796f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:14px 16px}
+.wrap{max-width:1200px;margin:0 auto}
+h1{font-size:20px;margin:0 0 2px}
+.sub{color:var(--mute);font-size:13px;margin-bottom:10px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input[type=search]{flex:1 1 200px;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
+.chip[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn{display:inline-block;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer;text-decoration:none;text-align:center}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--danger)}
+main{padding:16px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.thumb{aspect-ratio:4/3;background:var(--line);display:block;position:relative;overflow:hidden}
+.thumb img,.thumb video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 30%;display:block}
+.meta{padding:10px 12px 6px}
+.name{font-weight:600;word-break:break-all;font-size:14px}
+.info{color:var(--mute);font-size:12px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 12px 12px;margin-top:auto}
+.actions .btn{padding:6px 4px;font-size:12px}
+.note{color:var(--mute);font-size:13px;padding:30px 0;text-align:center}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;opacity:0;transition:.2s;pointer-events:none;font-size:13px}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.help{color:var(--mute);font-size:12px;margin-top:8px}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);max-width:min(92vw,900px);padding:0}
+dialog img,dialog video{max-width:100%;max-height:80vh;display:block}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>ISKCON Juja Image Library</h1>
+  <div class="sub" id="count">Loading…</div>
+  <div class="bar">
+    <input type="search" id="q" placeholder="Search by file name or folder…" aria-label="Search images">
+    <a class="btn primary" id="add" target="_blank" rel="noopener">+ Add images</a>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="help">Copy link = URL to use on the website. Rename/move opens the GitHub editor. Delete opens GitHub's delete page; only the repo owner can complete it.</div>
+</div></header>
+<main><div class="wrap"><div class="grid" id="grid"></div><div class="note" id="note"></div></div></main>
+<div class="toast" id="toast"></div>
+<dialog id="dlg"></dialog>
+<script>
+const OWNER="harekrishnaganjoni",REPO="iskcon-images",BRANCH="main",ROOT="public/";
+const IMG=/\.(jpe?g|png|webp|gif|svg|avif)$/i,VID=/\.(mp4|webm)$/i;
+const enc=p=>p.split("/").map(encodeURIComponent).join("/");
+let files=[],cat="all",query="";
+
+async function load(){
+  try{
+    const r=await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/git/trees/${BRANCH}?recursive=1`);
+    if(!r.ok)throw 0;
+    const j=await r.json();
+    files=j.tree.filter(t=>t.type==="blob"&&t.path.startsWith(ROOT)&&(IMG.test(t.path)||VID.test(t.path)))
+      .map(t=>({path:t.path.slice(ROOT.length),size:t.size||0}));
+  }catch(e){
+    try{ // fallback to the catalog if GitHub's API is rate-limited
+      const j=await (await fetch("/images.json")).json();
+      files=j.images.map(i=>({path:i.path,size:(i.size_kb||0)*1024}));
+    }catch(_){document.getElementById("count").textContent="Could not load the image list. Try again in a minute.";return}
+  }
+  files.sort((a,b)=>a.path.localeCompare(b.path));
+  render();
+}
+const cats=()=>[...new Set(files.map(f=>f.path.includes("/")?f.path.split("/")[0]:"(root)"))].sort();
+const catOf=f=>f.path.includes("/")?f.path.split("/")[0]:"(root)";
+const kb=n=>n>1048576?(n/1048576).toFixed(1)+" MB":Math.round(n/1024)+" KB";
+function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1600)}
+function chips(){
+  const el=document.getElementById("chips");el.innerHTML="";
+  const mk=(id,label)=>{const b=document.createElement("button");b.className="chip";b.textContent=label;b.setAttribute("aria-pressed",cat===id);b.onclick=()=>{cat=id;render()};el.append(b)};
+  mk("all",`All (${files.length})`);
+  cats().forEach(c=>mk(c,`${c} (${files.filter(f=>catOf(f)===c).length})`));
+}
+function render(){
+  chips();
+  const list=files.filter(f=>(cat==="all"||catOf(f)===cat)&&f.path.toLowerCase().includes(query));
+  document.getElementById("count").textContent=`${list.length} of ${files.length} files · images.iskconjuja.co.ke`;
+  const add=document.getElementById("add");
+  add.href=`https://github.com/${OWNER}/${REPO}/upload/${BRANCH}/${ROOT}${cat==="all"||cat==="(root)"?"":encodeURIComponent(cat)}`;
+  const g=document.getElementById("grid");g.innerHTML="";
+  document.getElementById("note").textContent=list.length?"":"No files match.";
+  for(const f of list){
+    const url=location.origin+"/"+enc(f.path);
+    const gh=`/${OWNER}/${REPO}`;
+    const d=document.createElement("div");d.className="card";
+    const isVid=VID.test(f.path);
+    d.innerHTML=`<a class="thumb" href="${url}" data-open>${isVid?`<video src="${url}#t=0.5" preload="metadata" muted></video>`:`<img loading="lazy" decoding="async" src="${url}" alt="">`}</a>
+      <div class="meta"><div class="name"></div><div class="info"></div></div>
+      <div class="actions">
+        <button class="btn" data-copy>Copy link</button>
+        <a class="btn" target="_blank" rel="noopener" href="https://github.dev${gh}/blob/${BRANCH}/${ROOT}${enc(f.path)}">Rename / move</a>
+        <a class="btn" target="_blank" rel="noopener" href="${url}">Open</a>
+        <a class="btn danger" target="_blank" rel="noopener" href="https://github.com${gh}/delete/${BRANCH}/${ROOT}${enc(f.path)}">Delete</a>
+      </div>`;
+    d.querySelector(".name").textContent=f.path.split("/").pop();
+    d.querySelector(".info").textContent=`${catOf(f)} · ${kb(f.size)}`;
+    d.querySelector("[data-copy]").onclick=async()=>{try{await navigator.clipboard.writeText(url);toast("Link copied")}catch(e){prompt("Copy this link:",url)}};
+    d.querySelector("[data-open]").onclick=e=>{e.preventDefault();const dlg=document.getElementById("dlg");dlg.innerHTML=isVid?`<video src="${url}" controls autoplay></video>`:`<img src="${url}" alt="">`;dlg.showModal()};
+    g.append(d);
+  }
+}
+document.getElementById("q").addEventListener("input",e=>{query=e.target.value.trim().toLowerCase();render()});
+document.getElementById("dlg").addEventListener("click",e=>{if(e.target.id==="dlg")e.target.close()});
+load();
+</script>
+</body>
+</html>
