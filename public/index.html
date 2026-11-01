@@ -83,8 +83,8 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   </div>
   <div class="cstage" id="c-stage"><img id="c-img" alt=""><div class="cbox" id="c-box"><i class="h" data-c="nw"></i><i class="h" data-c="ne"></i><i class="h" data-c="sw"></i><i class="h" data-c="se"></i></div></div>
   <div class="cfoot"><span class="info" id="c-info"></span>
-    <button class="btn" id="c-cancel">Close</button><button class="btn primary" id="c-save">Download crop</button></div>
-  <div class="help">This saves a cropped copy to your device. The original stays unchanged. To add the copy to the library, use + Add images.</div>
+    <button class="btn" id="c-cancel">Close</button><button class="btn" id="c-save">Download crop</button><button class="btn primary" id="c-lib">Save to library…</button></div>
+  <div class="help">Download crop saves a copy to your device. Save to library… downloads it and opens GitHub's upload page for this folder: drag the downloaded file in and click Commit changes. The original stays unchanged.</div>
 </div></dialog>
 <script>
 const OWNER="harekrishnaganjoni",REPO="iskcon-images",BRANCH="main",ROOT="public/";
@@ -144,7 +144,7 @@ function render(){
     d.querySelector(".name").textContent=f.path.split("/").pop();
     d.querySelector(".info").textContent=`${catOf(f)} · ${kb(f.size)}`;
     d.querySelector("[data-copy]").onclick=async()=>{try{await navigator.clipboard.writeText(url);toast("Link copied")}catch(e){prompt("Copy this link:",url)}};
-    const cb=d.querySelector("[data-crop]");if(cb)cb.onclick=()=>openCrop(url,f.path.split("/").pop());
+    const cb=d.querySelector("[data-crop]");if(cb)cb.onclick=()=>openCrop(url,f.path.split("/").pop(),catOf(f));
     d.querySelector("[data-open]").onclick=e=>{e.preventDefault();const dlg=document.getElementById("dlg");dlg.innerHTML=isVid?`<video src="${url}" controls autoplay></video>`:`<img src="${url}" alt="">`;dlg.showModal()};
     g.append(d);
   }
@@ -173,8 +173,8 @@ function fitRatio(){ // largest box of the chosen shape, centred on the current 
   if(w>W){w=W;h=w/r}if(h>H){h=H;w=h*r}
   C.w=w;C.h=h;C.x=clamp(cx-w/2,0,W-w);C.y=clamp(cy-h/2,0,H-h);
 }
-function openCrop(url,name){
-  C.name=name;$("c-ratio").value="0";
+function openCrop(url,name,folder){
+  C.name=name;C.folder=folder||"";$("c-ratio").value="0";
   cimg.onload=()=>{C.x=0;C.y=0;C.w=dispW();C.h=dispH();const k=0.9;C.w*=k;C.h*=k;C.x=(dispW()-C.w)/2;C.y=(dispH()-C.h)/2;paint()};
   cimg.src=url;$("cropdlg").showModal();
   if(cimg.complete&&cimg.naturalWidth)cimg.onload();
@@ -207,7 +207,7 @@ cbox.addEventListener("pointerup",endDrag);cbox.addEventListener("pointercancel"
 $("c-ratio").onchange=()=>{fitRatio();paint()};
 $("c-max").onchange=paint;
 $("c-cancel").onclick=()=>$("cropdlg").close();
-$("c-save").onclick=()=>{
+const doSave=(toLibrary)=>{
   const s=scale(),fmt=$("c-fmt").value,m=parseInt($("c-max").value);
   let cw=Math.round(C.w*s),ch=Math.round(C.h*s);
   if(m&&cw>m){ch=Math.round(ch*m/cw);cw=m}
@@ -220,9 +220,12 @@ $("c-save").onclick=()=>{
     const a=document.createElement("a");a.href=URL.createObjectURL(b);
     a.download=C.name.replace(/\.[^.]+$/,"")+"-crop."+ext;
     document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-    toast("Cropped copy downloaded");
+    toast(toLibrary?"Now drag the downloaded file into the GitHub page":"Cropped copy downloaded");
+    if(toLibrary){const f=C.folder&&C.folder!=="(root)"?encodeURIComponent(C.folder):"";window.open(`https://github.com/${OWNER}/${REPO}/upload/${BRANCH}/${ROOT}${f}`,"_blank","noopener")}
   },fmt,0.92);
 };
+$("c-save").onclick=()=>doSave(false);
+$("c-lib").onclick=()=>doSave(true);
 window.addEventListener("resize",()=>{if($("cropdlg").open){C.x=clamp(C.x,0,Math.max(0,dispW()-C.w));C.y=clamp(C.y,0,Math.max(0,dispH()-C.h));paint()}});
 document.getElementById("q").addEventListener("input",e=>{query=e.target.value.trim().toLowerCase();render()});
 document.getElementById("dlg").addEventListener("click",e=>{if(e.target.id==="dlg")e.target.close()});
